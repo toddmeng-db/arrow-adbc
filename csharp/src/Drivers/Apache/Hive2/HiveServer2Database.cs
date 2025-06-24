@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Apache.Arrow.Adbc.Drivers.Apache.Hive2.Util;
 
 namespace Apache.Arrow.Adbc.Drivers.Apache.Hive2
 {
@@ -27,17 +28,24 @@ namespace Apache.Arrow.Adbc.Drivers.Apache.Hive2
 
         internal HiveServer2Database(IReadOnlyDictionary<string, string> properties)
         {
-            this.properties = properties;
+            // Merge environment variables with explicit properties
+            this.properties = EnvironmentVariableUtil.MergeWithEnvironmentVariables(properties);
         }
 
         public override AdbcConnection Connect(IReadOnlyDictionary<string, string>? options)
         {
+            // Merge environment variables with connection options
+            var mergedOptions = options != null 
+                ? EnvironmentVariableUtil.MergeWithEnvironmentVariables(options) 
+                : null;
+
             // connection options takes precedence over database properties for the same option
-            IReadOnlyDictionary<string, string> mergedProperties = options == null
+            IReadOnlyDictionary<string, string> mergedProperties = mergedOptions == null
                 ? properties
-                : options
-                    .Concat(properties.Where(x => !options.Keys.Contains(x.Key, StringComparer.OrdinalIgnoreCase)))
+                : mergedOptions
+                    .Concat(properties.Where(x => !mergedOptions.Keys.Contains(x.Key, StringComparer.OrdinalIgnoreCase)))
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            
             HiveServer2Connection connection = HiveServer2ConnectionFactory.NewConnection(mergedProperties);
             connection.OpenAsync().Wait();
             return connection;
